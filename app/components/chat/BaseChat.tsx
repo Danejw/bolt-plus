@@ -1,7 +1,4 @@
-// @ts-nocheck
-// Preventing TS checks with files presented in the video for a better presentation.
-import type { Message } from 'ai';
-import React, { type RefCallback, useEffect } from 'react';
+import React, { type RefCallback, useEffect, useState } from 'react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Menu } from '~/components/sidebar/Menu.client';
 import { IconButton } from '~/components/ui/IconButton';
@@ -10,10 +7,8 @@ import { classNames } from '~/utils/classNames';
 import { MODEL_LIST, DEFAULT_PROVIDER } from '~/utils/constants';
 import { Messages } from './Messages.client';
 import { SendButton } from './SendButton.client';
-import { useState } from 'react';
 import { APIKeyManager } from './APIKeyManager';
 import Cookies from 'js-cookie';
-
 import styles from './BaseChat.module.scss';
 
 const EXAMPLE_PROMPTS = [
@@ -36,7 +31,7 @@ const ModelSelector = ({ model, setModel, modelList, providerList, provider, set
           const firstModel = [...modelList].find(m => m.provider == e.target.value);
           setModel(firstModel ? firstModel.name : '');
         }}
-        className="flex-1 p-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-prompt-background text-bolt-elements-textPrimary focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus transition-all"
+        className="flex-1 p-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-prompt-background text-bolt-elements-textPrimary focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus"
       >
         {providerList.map((provider) => (
           <option key={provider} value={provider}>
@@ -53,7 +48,7 @@ const ModelSelector = ({ model, setModel, modelList, providerList, provider, set
       <select
         value={model}
         onChange={(e) => setModel(e.target.value)}
-        className="flex-1 p-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-prompt-background text-bolt-elements-textPrimary focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus transition-all"
+        className="flex-1 p-2 rounded-lg border border-bolt-elements-borderColor bg-bolt-elements-prompt-background text-bolt-elements-textPrimary focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus"
       >
         {[...modelList].filter(e => e.provider == provider && e.name).map((modelOption) => (
           <option key={modelOption.name} value={modelOption.name}>
@@ -111,6 +106,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
     const TEXTAREA_MAX_HEIGHT = chatStarted ? 400 : 200;
     const [provider, setProvider] = useState(DEFAULT_PROVIDER);
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
+    const [isLooping, setIsLooping] = useState(false);
 
     useEffect(() => {
       // Load API keys from cookies on component mount
@@ -143,6 +139,27 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       } catch (error) {
         console.error('Error saving API keys to cookies:', error);
       }
+    };
+
+    const startLoop = () => {
+      setIsLooping(true);
+      const loop = async () => {
+        while (isLooping) {
+          sendMessage?.({ type: 'loop' }, input);
+          
+          // Wait for isStreaming to be false before continuing
+          while (isStreaming) {
+            await new Promise(resolve => setTimeout(resolve, 100)); // Check every 100ms
+          }
+
+          await new Promise(resolve => setTimeout(resolve, 5000)); // Delay before sending the next message
+        }
+      };
+      loop();
+    };
+
+    const stopLoop = () => {
+      setIsLooping(false);
     };
 
     return (
@@ -209,7 +226,7 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                 >
                   <textarea
                     ref={textareaRef}
-                    className={`w-full pl-4 pt-4 pr-16 focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus resize-none text-md text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary bg-transparent transition-all`}
+                    className={`w-full pl-4 pt-4 pr-16 focus:outline-none focus:ring-2 focus:ring-bolt-elements-focus resize-none text-md text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary`}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         if (event.shiftKey) {
@@ -275,13 +292,27 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                     </div>
                     {input.length > 3 ? (
                       <div className="text-xs text-bolt-elements-textTertiary">
-                        Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd> + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Return</kbd> for a new line
+                        Use <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Shift</kbd> + <kbd className="kdb px-1.5 py-0.5 rounded bg-bolt-elements-background-depth-2">Enter</kbd> to add a new line
                       </div>
                     ) : null}
                   </div>
                 </div>
                 <div className="bg-bolt-elements-background-depth-1 pb-6">{/* Ghost Element */}</div>
               </div>
+            </div>
+            <div className="flex justify-center gap-4 mt-4">
+              <button
+                onClick={startLoop}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg"
+              >
+                Start Loop
+              </button>
+              <button
+                onClick={stopLoop}
+                className="px-4 py-2 bg-red-500 text-white rounded-lg"
+              >
+                Stop Loop
+              </button>
             </div>
             {!chatStarted && (
               <div id="examples" className="relative w-full max-w-xl mx-auto mt-8 flex justify-center">
